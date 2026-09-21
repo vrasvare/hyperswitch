@@ -2,6 +2,8 @@ use async_bb8_diesel::AsyncRunQueryDsl;
 #[cfg(feature = "v2")]
 use diesel::PgExpressionMethods;
 #[cfg(feature = "v1")]
+use diesel::PgJsonbExpressionMethods;
+#[cfg(feature = "v1")]
 use diesel::Table;
 use diesel::{
     associations::HasTable, debug_query, pg::Pg, BoolExpressionMethods, ExpressionMethods, QueryDsl,
@@ -142,6 +144,31 @@ impl PaymentMethod {
             Some(dsl::payment_method_id.asc()),
         )
         .await
+    }
+
+    pub async fn find_by_merchant_connector_id_connector_mandate_id(
+        conn: &DatabaseConnectionWithContext<'_>,
+        merchant_connector_id: &common_utils::id_type::MerchantConnectorAccountId,
+        connector_mandate_id: &str,
+    ) -> StorageResult<Self> {
+        let mandate_lookup = serde_json::json!({
+            merchant_connector_id.get_string_repr(): {
+                "connector_mandate_id": connector_mandate_id
+            }
+        });
+
+        generics::generic_filter::<<Self as HasTable>::Table, _, _, Self>(
+            conn,
+            dsl::connector_mandate_details.contains(mandate_lookup),
+            Some(1),
+            None,
+            Some(dsl::last_modified.desc()),
+        )
+        .await?
+        .into_iter()
+        .next()
+        .ok_or_else(|| error_stack::report!(errors::DatabaseError::NotFound))
+        .attach_printable("Error finding payment method by connector mandate id")
     }
 
     pub async fn get_count_by_customer_id_merchant_id_status(

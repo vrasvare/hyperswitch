@@ -1260,7 +1260,7 @@ impl From<RecurrenceStatus> for AttemptStatus {
             RecurrenceStatus::Aprovada => Self::Charged,
             RecurrenceStatus::Rejeitada => Self::Failure,
             RecurrenceStatus::Expirada => Self::Failure,
-            RecurrenceStatus::Cancelada => Self::Voided,
+            RecurrenceStatus::Cancelada => Self::Failure,
             RecurrenceStatus::Recebida | RecurrenceStatus::Aceita | RecurrenceStatus::Enviada => {
                 Self::Pending
             }
@@ -1398,6 +1398,121 @@ impl<F, T> TryFrom<ResponseRouterData<F, SantanderPaymentsSyncResponse, T, Payme
                         })
                     }
                 }
+            }
+            SantanderPaymentsSyncResponse::PixQrWebhook(pix_data) => {
+                let connector_metadata = pix_data
+                    .pix
+                    .first()
+                    .map(|pix| {
+                        let data = SantanderData {
+                            end_to_end_id: Some(pix.end_to_end_id.clone().expose()),
+                            paid_at: None,
+                        };
+                        serde_json::to_value(data)
+                            .change_context(errors::ConnectorError::ParsingFailed)
+                    })
+                    .transpose()?;
+
+                let txid = pix_data
+                    .pix
+                    .first()
+                    .map(|pix| pix.txid.clone().expose())
+                    .ok_or(errors::ConnectorError::MissingRequiredField {
+                        field_name: "txid".into(),
+                    })?;
+
+                // Preserve existing `TransactionResponse` fields and only update
+                // `resource_id` and `connector_metadata`.
+                let response = match item.data.response.clone() {
+                    Ok(PaymentsResponseData::TransactionResponse {
+                        redirection_data,
+                        mandate_reference,
+                        network_txn_id,
+                        connector_response_reference_id,
+                        incremental_authorization_allowed,
+                        authentication_data,
+                        charges,
+                        ..
+                    }) => Ok(PaymentsResponseData::TransactionResponse {
+                        resource_id: ResponseId::ConnectorTransactionId(txid),
+                        redirection_data,
+                        mandate_reference,
+                        connector_metadata,
+                        network_txn_id,
+                        network_txn_link_id: None,
+                        connector_response_reference_id,
+                        incremental_authorization_allowed,
+                        authentication_data,
+                        charges,
+                        payment_account_reference: None,
+                    }),
+                    other => other,
+                };
+
+                Ok(Self {
+                    status: AttemptStatus::Charged,
+                    response,
+                    ..item.data
+                })
+            }
+            SantanderPaymentsSyncResponse::PixAutomaticoCobrWebhook(cobr_data) => {
+                let entry = cobr_data.cobsr.first().ok_or(
+                    errors::ConnectorError::MissingRequiredField {
+                        field_name: "cobsr".into(),
+                    },
+                )?;
+
+                let attempt_status = match entry.status {
+                    SantanderPixAutomaticoCobrStatus::Concluida => {
+                        let has_end_to_end_id = entry
+                            .pix
+                            .as_ref()
+                            .and_then(|pix_list| pix_list.first())
+                            .map(|pix| !pix.end_to_end_id.clone().expose().is_empty())
+                            .unwrap_or(false);
+                        if has_end_to_end_id {
+                            AttemptStatus::Charged
+                        } else {
+                            AttemptStatus::Failure
+                        }
+                    }
+                    SantanderPixAutomaticoCobrStatus::Cancelada => AttemptStatus::Voided,
+                    SantanderPixAutomaticoCobrStatus::Expirada
+                    | SantanderPixAutomaticoCobrStatus::Rejeitada => AttemptStatus::Failure,
+                    _ => AttemptStatus::Pending,
+                };
+
+                let connector_metadata = entry
+                    .pix
+                    .as_ref()
+                    .and_then(|pix_list| pix_list.first())
+                    .map(|pix| {
+                        let data = SantanderData {
+                            end_to_end_id: Some(pix.end_to_end_id.clone().expose()),
+                            paid_at: None,
+                        };
+                        serde_json::to_value(data)
+                            .change_context(errors::ConnectorError::ParsingFailed)
+                    })
+                    .transpose()?;
+
+                Ok(Self {
+                    status: attempt_status,
+                    response: Ok(PaymentsResponseData::TransactionResponse {
+                        resource_id: ResponseId::ConnectorTransactionId(entry.txid.clone()),
+                        redirection_data: Box::new(None),
+                        mandate_reference: Box::new(None),
+                        connector_metadata,
+                        network_txn_id: None,
+                        network_txn_link_id: None,
+                        connector_response_reference_id: Some(entry.id_rec.clone()),
+                        incremental_authorization_allowed: None,
+                        authentication_data: None,
+                        charges: None,
+                        payment_account_reference: None,
+                    }),
+                    ..item.data
+                })
             }
             // Journey 1/2
             SantanderPaymentsSyncResponse::PixAutomaticoConsultAndActivateJourney(res) => {
@@ -3259,4 +3374,8 @@ impl
             ..item.data
         })
     }
+}
+
+pub fn is_dummy_webhook(id_rec: &str) -> bool {
+    id_rec.to_uppercase().contains("TESTE")
 }

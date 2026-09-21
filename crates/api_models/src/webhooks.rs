@@ -46,6 +46,7 @@ pub enum IncomingWebhookEvent {
     DisputeLost,
     MandateActive,
     MandateRevoked,
+    MandateActionRequired,
     EndpointVerification,
     ExternalAuthenticationARes,
     FrmApproved,
@@ -135,6 +136,16 @@ impl IncomingWebhookEvent {
             // Associated data events
             43 => Self::PaymentAssociatedDataUpdate,
             _ => Self::EventNotSupported,
+        }
+    }
+}
+
+impl From<IncomingWebhookEvent> for api_enums::AttemptStatus {
+    fn from(value: IncomingWebhookEvent) -> Self {
+        match value {
+            IncomingWebhookEvent::MandateActive => Self::Charged,
+            IncomingWebhookEvent::MandateRevoked => Self::Failure,
+            _ => Self::Pending,
         }
     }
 }
@@ -298,9 +309,9 @@ impl From<IncomingWebhookEvent> for WebhookFlow {
             IncomingWebhookEvent::RefundSuccess
             | IncomingWebhookEvent::RefundFailure
             | IncomingWebhookEvent::RefundReview => Self::Refund,
-            IncomingWebhookEvent::MandateActive | IncomingWebhookEvent::MandateRevoked => {
-                Self::Mandate
-            }
+            IncomingWebhookEvent::MandateActive
+            | IncomingWebhookEvent::MandateRevoked
+            | IncomingWebhookEvent::MandateActionRequired => Self::Mandate,
             IncomingWebhookEvent::PaymentAssociatedDataUpdate => Self::AssociatedDataUpdate,
             IncomingWebhookEvent::DisputeOpened
             | IncomingWebhookEvent::DisputeAccepted
