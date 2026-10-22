@@ -255,6 +255,7 @@ pub enum PayoutMethodData {
     Card(CardPayout),
     Bank(Bank), // Deprecated - Use BankTransfer instead
     Wallet(Wallet),
+    Crypto(CryptoPayout),
     BankRedirect(BankRedirect),
     Passthrough(Passthrough),
     BankTransfer(BankTransfer),
@@ -631,6 +632,22 @@ pub struct PayshapProxyBankTransfer {
     /// Shap ID proxy. Required when proxy_type is shap_id.
     #[schema(value_type = Option<String>, example = "21e3123")]
     pub shap_id: Option<Secret<String>>,
+}
+
+#[derive(Default, Eq, PartialEq, Clone, Debug, Deserialize, Serialize, ToSchema)]
+pub struct CryptoPayout {
+    /// Destination wallet address for the withdrawal.
+    #[schema(value_type = String, example = "0x742d35Cc6634C0532925a3b844Bc454e4438f44e")]
+    pub wallet_address: Secret<String>,
+    /// Blockchain network used for the withdrawal.
+    #[schema(value_type = String, example = "ethereum")]
+    pub network: String,
+    /// Currency delivered to the destination wallet.
+    #[schema(value_type = Currency, example = "USDC")]
+    pub destination_currency: api_enums::Currency,
+    /// Currency debited from the merchant settlement balance.
+    #[schema(value_type = Currency, example = "USD")]
+    pub source_currency: api_enums::Currency,
 }
 
 #[derive(Eq, PartialEq, Clone, Debug, Deserialize, Serialize, ToSchema)]

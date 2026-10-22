@@ -1475,6 +1475,7 @@ impl ForeignFrom<&api_models::payouts::PayoutMethodData> for api_enums::PaymentM
             api_models::payouts::PayoutMethodData::BankTransfer(bank) => Self::foreign_from(bank),
             api_models::payouts::PayoutMethodData::Card(_) => Self::Debit,
             api_models::payouts::PayoutMethodData::Wallet(wallet) => Self::foreign_from(wallet),
+            api_models::payouts::PayoutMethodData::Crypto(_) => Self::CryptoCurrency,
             api_models::payouts::PayoutMethodData::BankRedirect(bank_redirect) => {
                 Self::foreign_from(bank_redirect)
             }
@@ -1549,6 +1550,7 @@ impl ForeignFrom<&api_models::payouts::PayoutMethodData> for api_enums::PaymentM
             api_models::payouts::PayoutMethodData::BankTransfer(_) => Self::BankTransfer,
             api_models::payouts::PayoutMethodData::Card(_) => Self::Card,
             api_models::payouts::PayoutMethodData::Wallet(_) => Self::Wallet,
+            api_models::payouts::PayoutMethodData::Crypto(_) => Self::Wallet,
             api_models::payouts::PayoutMethodData::BankRedirect(_) => Self::BankRedirect,
             api_models::payouts::PayoutMethodData::Passthrough(passthrough) => {
                 Self::from(passthrough.token_type)
@@ -1568,6 +1570,7 @@ impl ForeignTryFrom<&api_models::payouts::PayoutMethodData> for api_models::enum
             api_models::payouts::PayoutMethodData::BankTransfer(_) => Ok(Self::Bank),
             api_models::payouts::PayoutMethodData::Card(_) => Ok(Self::Card),
             api_models::payouts::PayoutMethodData::Wallet(_) => Ok(Self::Wallet),
+            api_models::payouts::PayoutMethodData::Crypto(_) => Ok(Self::Wallet),
             api_models::payouts::PayoutMethodData::BankRedirect(_) => Ok(Self::BankRedirect),
             api_models::payouts::PayoutMethodData::Passthrough(passthrough) => {
                 Self::foreign_try_from(api_enums::PaymentMethod::from(passthrough.token_type))
